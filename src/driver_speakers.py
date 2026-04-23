@@ -49,7 +49,7 @@ class DriverSpeakers:
                 stderr=subprocess.PIPE,
             )
             self.playback_process = subprocess.Popen(
-                ["aplay", "-D", "plughw:CARD=Lite,DEV=0"],
+                ["aplay", "-D", "plughw:2,0"],
                 stdin=self.sox_process.stdout,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
