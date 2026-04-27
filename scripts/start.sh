@@ -52,6 +52,7 @@ python behaviour_wifi_connect.py >> /home/idmind/elmo-v2/logs/behaviour_wifi_con
 (sleep 8; python behaviour_photographer.py) >> /home/idmind/elmo-v2/logs/behaviour_photographer.log &
 (sleep 8; python behaviour_hello.py) >> /home/idmind/elmo-v2/logs/behaviour_hello.log &
 python behaviour_clock.py >> /home/idmind/elmo-v2/logs/behaviour_clock.log &
+python behaviour_ouch.py >> /home/idmind/elmo-v2/logs/behaviour_ouch.log &
 
 python sleep_mode.py >> /home/idmind/elmo-v2/logs/sleep_mode.log &
 
