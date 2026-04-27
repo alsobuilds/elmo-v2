@@ -1019,6 +1019,7 @@ class Onboard(DBEntry):
         "video": None,
         "speech": None,
         "log": None,
+        "touch": False,
     }
 
 
@@ -1269,6 +1270,7 @@ class Behaviours(DBEntry):
         "akinator": False,
         "wifi_connect": False,
         "face_detection": False,
+        "ouch": False,
     }
 
     def list_behaviours(self):
