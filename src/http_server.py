@@ -183,6 +183,12 @@ def delete_video(name):
         return jsonify("OK")
 
 
+@app.route("/api/touch", methods=["POST"])
+def touch():
+    onboard.touch = True
+    return jsonify({})
+
+
 if __name__ == "__main__":
     server_port = server.http_port
     server_thread = threading.Thread(
