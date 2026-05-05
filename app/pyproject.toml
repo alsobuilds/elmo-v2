@@ -1,0 +1,11 @@
+[project]
+name = "Elmo-App"
+version = "1.2.0"
+description = "Companion App for Elmo. It can be used to test all the hardware features of Elmo and also provides a user interface for users to interact with Elmo."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.32.5",
+    "PyQt5>=5.15.0",
+    "netifaces>=0.11.0"
+]
