@@ -43,6 +43,7 @@ class BehaviourClock:
         self.node = mw.Node("behaviour_clock")
         self.touch_sensors = mw.TouchSensors()
         self.behaviours = mw.Behaviours()
+        self.battery = mw.Battery()
 
         global CITY
         CITY = self.get_city()
@@ -234,6 +235,63 @@ class BehaviourClock:
 
         return self.leds.merge_halves(top, bottom)
 
+    def generate_battery_image(self):
+        """
+        Generate the battery display image using the half-half layout.
+
+        Behavior
+        --------
+        - Top half: battery icon showing charge level (red/yellow/green fill).
+        - Bottom half: percentage digits, centred by digit count (no % symbol).
+        - 1 digit  (0–9):   single digit centred at ox=5.
+        - 2 digits (10–99): left at ox=3, right at ox=7 (1-px gap at centre).
+        - 3 digits (100):   digits at ox=1, ox=5, ox=9.
+        - Halves are merged into a full 13x13 canvas.
+
+        Returns
+        -------
+        PIL.Image.Image
+            Full 13x13 image ready to be loaded into the LEDs.
+        """
+        pct_int = max(0, min(100, int(self.battery.percentage)))
+        if pct_int <= 3:
+            icon_key = "empty"
+        elif pct_int <= 10:
+            icon_key = "level_1"
+        elif pct_int <= 20:
+            icon_key = "level_2"
+        elif pct_int <= 30:
+            icon_key = "level_3"
+        elif pct_int <= 40:
+            icon_key = "level_4"
+        elif pct_int <= 50:
+            icon_key = "level_5"
+        elif pct_int <= 60:
+            icon_key = "level_6"
+        elif pct_int <= 70:
+            icon_key = "level_7"
+        elif pct_int <= 80:
+            icon_key = "level_8"
+        elif pct_int <= 90:
+            icon_key = "level_9"
+        else:
+            icon_key = "level_10"
+        top = self.leds.create_top_canvas()
+        self.leds.draw_icon(top, "battery_icons", icon_key)
+        bottom = self.leds.create_bottom_canvas()
+        p_str = str(pct_int)
+        if len(p_str) == 1:
+            self.leds.draw_digit(bottom, p_str[0], 5, 1)
+        elif len(p_str) == 2:
+            self.leds.draw_digit(bottom, p_str[0], 3, 1)
+            self.leds.draw_digit(bottom, p_str[1], 7, 1)
+        else:
+            self.leds.draw_digit(bottom, "1", 1, 1)
+            self.leds.draw_digit(bottom, "0", 5, 1)
+            self.leds.draw_digit(bottom, "0", 9, 1)
+
+        return self.leds.merge_halves(top, bottom)
+
     def fade_images(self, img_from, img_to, steps=10, duration=1):
         """
         Request a fade transition between two images via driver_leds.
@@ -276,12 +334,14 @@ class BehaviourClock:
 
     def sequence(self):
         """
-        Execute the full clock and weather display sequence.
+        Display sequence: clock, weather and battery.
 
         Behavior
         --------
-        - Fades in the clock image, holds for 5 seconds, fades out.
-        - Fades in the weather image, holds for 5 seconds, fades out.
+        - Fades in the clock image, holds for 1.5 seconds, fades out.
+        - Fades in the weather image, holds for 1.5 seconds, fades out.
+        - Fades in the battery image, holds for 1.5 seconds with live percentage
+        updates every 100ms, fades out.
         - Aborts at any step if blush becomes active.
         """
         if self.is_blush_active():
@@ -291,13 +351,31 @@ class BehaviourClock:
         weather_img = self.generate_weather_image()
         if not self.fade_images(img_black, clock_img, steps=15, duration=1):
             return
-        time.sleep(5)
+        time.sleep(1.5)
         if not self.fade_images(clock_img, img_black, steps=15, duration=1):
             return
         if not self.fade_images(img_black, weather_img, steps=20, duration=1):
             return
-        time.sleep(5)
+        time.sleep(1.5)
         if not self.fade_images(weather_img, img_black, steps=20, duration=1):
+            return
+        battery_img = self.generate_battery_image()
+        if not self.fade_images(img_black, battery_img, steps=15, duration=1):
+            return
+        # Hold for 5 seconds, redrawing immediately whenever percentage changes
+        last_pct = max(0, min(100, int(self.battery.percentage)))
+        hold_end = time.time() + 1.5
+        while time.time() < hold_end:
+            if self.is_blush_active():
+                self.leds.clear()
+                return
+            current_pct = max(0, min(100, int(self.battery.percentage)))
+            if current_pct != last_pct:
+                battery_img = self.generate_battery_image()
+                self.leds.load_from_image(battery_img)
+                last_pct = current_pct
+            time.sleep(0.1)
+        if not self.fade_images(battery_img, img_black, steps=15, duration=1):
             return
         self.leds.clear()
 
@@ -329,4 +407,5 @@ class BehaviourClock:
 
 
 if __name__ == "__main__":
-    BehaviourClock().run()
+    node = BehaviourClock()
+    node.run()
