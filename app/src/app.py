@@ -95,7 +95,7 @@ class Window(QMainWindow, Ui_MainWindow):
         super().__init__(parent)
         self.setupUi(self)
         self.show()
-        self.setWindowTitle("Elmo V2")
+        self.setWindowTitle("TAGI App")
 
         self.initialize_leds()
         self.initialize_motors()
@@ -107,7 +107,7 @@ class Window(QMainWindow, Ui_MainWindow):
         self.log("Application running.")
 
         # scan robots on startup
-        robot_client.set_robot_model("elmo")
+        robot_client.set_robot_model("tagi")
         self.client = None
         self.scan_network.clicked.connect(self.scan_robots)
         self.shutdown.clicked.connect(self.do_shutdown)
