@@ -2,10 +2,10 @@
 
 Behaviour node.
 
-When selected and triggered, it displays the camera on the screen, 
+When selected and triggered, it displays the camera on the screen,
 centers the face.
 
-Once the face is centered, the head stays on that position, 
+Once the face is centered, the head stays on that position,
 the countdown starts and, when it ends, it takes a picture and
 sends it to be printed on an INSTAX.
 
@@ -28,6 +28,23 @@ CONFIRM_FRAMES = 3
 
 
 def take_picture(mjpeg_url):
+    """
+    Capture a single JPEG frame from an MJPEG stream and save it to disk.
+
+    Reads the stream until a complete JPEG frame (SOI 0xFFD8 … EOI 0xFFD9) is
+    assembled, decodes it, resizes to 480 px wide while preserving the aspect
+    ratio, crops the height to 480 px, and writes the result to
+    /tmp/captured_frame.png.
+
+    Parameters
+    ----------
+    mjpeg_url : str
+        Full URL of the MJPEG stream endpoint (e.g. 'http://localhost:8080/stream.mjpg').
+
+    Returns
+    -------
+    None
+    """
     # Send an HTTP GET request to the MJPEG stream URL
     response = requests.get(mjpeg_url, stream=True)
     if response.status_code == 200:
@@ -52,6 +69,22 @@ def take_picture(mjpeg_url):
 
 
 def print_picture(self):
+    """
+    Send the captured frame to the INSTAX printer via the instax_api CLI tool.
+
+    Activates the instax virtual environment and invokes the print command as a
+    subprocess. stdout, stderr, and the return code are all logged via the node
+    logger for diagnosis.
+
+    Parameters
+    ----------
+    self : BehaviourPhotographer
+        The calling behaviour instance, used to access self.node for logging.
+
+    Returns
+    -------
+    None
+    """
     # Temporary solution since this tool needs other environment
     result = subprocess.run(
         "source /home/idmind/instax_api/instax/.venv/bin/activate && python -m instax.print -v 3 /tmp/captured_frame.png",
@@ -63,6 +96,53 @@ def print_picture(self):
 
 
 class BehaviourPhotographer:
+    """
+    Middleware behaviour that manages the full photo-taking and INSTAX printing flow.
+
+    When the photographer mode is active and a sustained chest-touch is detected,
+    the behaviour shows the camera feed on the onboard display, centres the
+    detected face using pan/tilt servos, runs a 10-second LED countdown, captures
+    a frame, and prints it on the connected INSTAX printer over Wi-Fi.
+
+    > ## Attributes
+
+    ``touch_sensors : mw.TouchSensors`` : Middleware touch sensor state used to detect chest touches.
+
+    ``onboard : mw.Onboard`` : Middleware onboard display controller for images and the camera feed.
+    
+    ``camera : mw.Camera`` : Middleware camera state controller (URL, take_picture, taking_picture, error flags).
+
+    ``behaviours : mw.Behaviours`` : Middleware behaviour configuration flags, used to read/write the photographer toggle.
+
+    ``server : mw.Server`` : Middleware server helper for resolving icon resource URLs.
+
+    ``leds : mw.Leds`` : Middleware LED controller used to display the countdown icons.
+
+    ``pan : mw.Pan`` : Middleware pan servo controller for horizontal head movement.
+
+    ``tilt : mw.Tilt`` : Middleware tilt servo controller for vertical head movement.
+
+    ``printer : mw.Printer`` : Middleware printer state controller (wifi network name, connected flag).
+
+    ``node : mw.Node`` : Middleware node used for shutdown and logging.
+
+    ``detector : cv2.FaceDetectorYN`` : YuNet ONNX face detector configured for FRAME_W x FRAME_H input.
+
+    ``latest_frame : numpy.ndarray or None`` : Most recent frame from the reader thread; None until stream is started.
+
+    ``lock : threading.Lock`` : Mutex protecting access to latest_frame between the reader thread and main loop.
+
+    ``stream : cv2.VideoCapture or None`` : MJPEG video capture; None when the stream is stopped.
+
+    ``reader_running : bool`` : Flag used to signal the reader thread to stop when the stream is closed.
+
+    ``smooth_cx : float`` : Exponentially smoothed horizontal face centre position (set on first track_face call).
+
+    ``smooth_cy : float`` : Exponentially smoothed vertical face centre position (set on first track_face call).
+
+    > ## Functions
+    """
+
     def __init__(self):
         self.touch_sensors = mw.TouchSensors()
         self.onboard = mw.Onboard()
@@ -84,7 +164,21 @@ class BehaviourPhotographer:
 
 
     def start_stream(self):
-        """Open the MJPEG stream and start the reader thread."""
+        """
+        Open the MJPEG stream and start the background reader thread.
+
+        Creates a new VideoCapture connection to the local MJPEG endpoint,
+        sets reader_running to True, and spawns a daemon reader thread.
+        Sleeps 1 s to allow the first frames to arrive before returning.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         self.stream = cv2.VideoCapture("http://localhost:8080/stream.mjpg")
         self.reader_running = True
         t = threading.Thread(target=self.reader, daemon=True)
@@ -93,7 +187,20 @@ class BehaviourPhotographer:
         self.node.loginfo("Stream started.")
 
     def stop_stream(self):
-        """Stop the reader thread and release the stream."""
+        """
+        Signal the reader thread to stop and release the MJPEG stream.
+
+        Sets reader_running to False, waits 0.3 s for the thread to exit,
+        releases the VideoCapture object, and clears latest_frame.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         self.reader_running = False
         time.sleep(0.3)
         if self.stream:
@@ -106,6 +213,20 @@ class BehaviourPhotographer:
     # these functions are the same of behaviour_hello.py 
 
     def reader(self):
+        """
+        Background thread target that continuously reads frames from the MJPEG stream
+        and stores the latest one for use by the detection loop.
+
+        Runs until reader_running is set to False. Failed reads are silently skipped.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         while self.reader_running:
             if self.stream:
                 ret, frame = self.stream.read()
@@ -114,6 +235,25 @@ class BehaviourPhotographer:
                         self.latest_frame = frame
 
     def detect_face(self):
+        """
+        Grab the latest frame and run YuNet face detection on it.
+
+        Only the highest-confidence (first) detected face is considered.
+        Returns the pixel coordinates of its centre.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        detected : bool
+            True if at least one face was found in the latest frame, False otherwise.
+        cx : float or None
+            Horizontal pixel position of the face centre; None when no face is detected.
+        cy : float or None
+            Vertical pixel position of the face centre; None when no face is detected.
+        """
         with self.lock:
             frame = self.latest_frame
         if frame is None:
@@ -127,6 +267,25 @@ class BehaviourPhotographer:
         return True, cx, cy
 
     def track_face(self, cx, cy):
+        """
+        Update pan and tilt servo targets to keep the detected face centred in frame.
+
+        Applies exponential smoothing (alpha=0.4) to the raw face position before
+        computing the tracking error. A dead-band of ±8 % of frame width/height
+        suppresses small jitter. The resulting angle adjustments are clamped to each
+        servo's hardware limits before being written.
+
+        Parameters
+        ----------
+        cx : float
+            Horizontal pixel position of the face centre in the current frame.
+        cy : float
+            Vertical pixel position of the face centre in the current frame.
+
+        Returns
+        -------
+        None
+        """
         alpha = 0.4
         if not hasattr(self, 'smooth_cx'):
             self.smooth_cx = float(cx)
@@ -160,7 +319,23 @@ class BehaviourPhotographer:
     # and returns a boolean (true or false) to if its centered or not centered, respectivelly.
 
     def center_face(self):
-        """Track face until centered or timeout. Returns True if centered."""
+        """
+        Track the detected face with the servos until it is centred or a timeout elapses.
+
+        Enables pan and tilt torque, then polls detect_face() at ~10 Hz for up to 5 s.
+        On each frame where a face is found, track_face() is called and the normalised
+        offset from the frame centre is checked. After CONFIRM_FRAMES consecutive frames
+        within the ±8 % dead-band on both axes, the face is declared centred.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        bool
+            True if the face was successfully centred within the timeout, False otherwise.
+        """
         self.node.loginfo("Centering face...")
         self.pan.enable = True
         self.tilt.enable = True
@@ -189,7 +364,20 @@ class BehaviourPhotographer:
 
 
     def countdown(self):
-        """Show countdown on LEDs."""
+        """
+        Display a 10-to-0 countdown on the LED panel using numbered icon images.
+
+        Saves the current LED colours, loads icons 10.png through 0.png one per
+        second via the server URL resolver, then restores the original colours.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         old_colors = self.leds.colors
         for i in range(10, -1, -1):
             icon_name = "%d.png" % i
@@ -200,6 +388,21 @@ class BehaviourPhotographer:
 
 
     def disconnect_from_printer_wifi(self):
+        """
+        Disconnect from the INSTAX printer Wi-Fi network via nmcli.
+
+        Reads the Wi-Fi network name from printer.wifi and issues a
+        'nmcli con down' command. Updates printer.connected on success.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        bool
+            True if the disconnection command exited with code 0, False otherwise.
+        """
         wifi = self.printer.wifi
         success = 0 == os.system("sudo nmcli con down id %s" % wifi)
         if success:
@@ -209,6 +412,21 @@ class BehaviourPhotographer:
 
 
     def connect_to_printer_wifi(self):
+        """
+        Connect to the INSTAX printer Wi-Fi network via nmcli.
+
+        Reads the Wi-Fi network name from printer.wifi and issues a
+        'nmcli con up' command. Updates printer.connected on success.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        bool
+            True if the connection command exited with code 0, False otherwise.
+        """
         wifi = self.printer.wifi
         success = 0 == os.system("sudo nmcli con up id %s" % wifi)
         if success:
@@ -221,6 +439,28 @@ class BehaviourPhotographer:
     # show stream -> center face -> countdown -> take picture -> print -> restore
 
     def take_photo_flow(self):
+        """
+        Execute the full photo-taking and printing sequence in order.
+
+        Steps performed:
+        1. Start the MJPEG stream and display the camera feed on the onboard screen.
+        2. Attempt to centre the detected face using pan/tilt servos (center_face).
+        3. Run the 10-second LED countdown.
+        4. Stop the stream so take_picture() can open a fresh connection.
+        5. Capture a single frame to /tmp/captured_frame.png.
+        6. Restore the onboard display (clear camera feed).
+        7. Connect to the printer Wi-Fi, call print_picture(), then disconnect.
+           On Wi-Fi connection failure, logs a warning and writes an error to camera.error.
+        8. Clear the photographer flag to return to normal mode.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         self.node.loginfo("Photo flow started.")
 
         # start stream and show camera on screen
@@ -262,6 +502,29 @@ class BehaviourPhotographer:
 
 
     def run(self):
+        """
+        Main behaviour loop.
+
+        Disconnects from the printer Wi-Fi on startup to avoid interfering with
+        normal network traffic, then polls at LOOP_RATE Hz. On each tick:
+        - Resets touch_counter and skips if photographer mode is not active.
+        - Increments touch_counter while touch_sensors.touch_chest is True.
+        - Once touch_counter reaches 10 (i.e. ~1 s of continuous touch), clears
+          the counter, sets camera state flags, calls take_photo_flow(), and
+          resets camera.taking_picture on completion.
+        - Resets touch_counter if the chest touch is released before the threshold.
+
+        Stops the stream and shuts down the middleware node on exit (including on
+        KeyboardInterrupt or any other exception).
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         try:
             self.node.loginfo("Starting behaviour.")
             touch_counter = 0

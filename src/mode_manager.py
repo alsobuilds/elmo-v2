@@ -1,3 +1,15 @@
+"""
+
+Tool node.
+
+Manages robot operating modes and enables or disables behaviours
+according to the selected interaction mode.
+
+The node cycles through modes using the GPIO button and displays
+an icon preview on the LED matrix before applying the mode.
+
+"""
+
 import time
 
 import middleware as mw
@@ -14,7 +26,38 @@ MODE_WIFI_CONNECT = 4
 
 
 class ModeManager:
+    """
+    Tool node responsible for robot mode selection and behaviour toggling.
+
+    Cycles through predefined robot modes using the hardware button,
+    previews the selected mode icon on the LED matrix, and activates
+    or deactivates middleware behaviour flags accordingly.
+
+    > ## Attributes
+
+    ``leds : mw.Leds`` : Middleware LED controller used to display mode icons.
+
+    ``server : mw.Server`` : Middleware server helper for resolving icon URLs.
+
+    ``touch_sensors : mw.TouchSensors`` : Middleware touch sensor state.
+
+    ``behaviours : mw.Behaviours`` : Middleware behaviour configuration flags.
+
+    ``gpio : mw.GPIO`` : Middleware GPIO interface used for button input.
+
+    ``node : mw.Node`` : Middleware node used for lifecycle management and logging.
+
+    ``modes : list[int]`` : Ordered list of available robot modes.
+
+    ``icons : dict`` : Mapping between mode identifiers and LED icon filenames.
+
+    > ## Functions
+    """
+
     def __init__(self):
+        """
+        Initialise middleware interfaces, mode definitions and icon mappings.
+        """
         self.leds = mw.Leds()
         self.server = mw.Server()
         self.touch_sensors = mw.TouchSensors()
@@ -37,6 +80,12 @@ class ModeManager:
         }
 
     def idle_mode(self):
+        """
+        Enable behaviours associated with idle mode.
+
+        Activates passive behaviours such as clock, blush and ouch,
+        while disabling interactive modes.
+        """
         self.node.loginfo("idle mode")
         self.behaviours.conversation = False
         self.behaviours.photographer = False
@@ -47,6 +96,12 @@ class ModeManager:
         self.behaviours.ouch = True
 
     def conversation_mode(self):
+        """
+        Enable conversation interaction mode.
+
+        Activates the conversation behaviour and disables all other
+        mutually exclusive behaviours.
+        """
         self.node.loginfo("conversation mode")
         self.behaviours.conversation = True
         self.behaviours.photographer = False
@@ -57,6 +112,12 @@ class ModeManager:
         self.behaviours.ouch = False
 
     def photographer_mode(self):
+        """
+        Enable photographer interaction mode.
+
+        Activates the photographer behaviour and disables all other
+        mutually exclusive behaviours.
+        """
         self.node.loginfo("photographer mode")
         self.behaviours.conversation = False
         self.behaviours.photographer = True
@@ -67,6 +128,12 @@ class ModeManager:
         self.behaviours.ouch = False
 
     def akinator_mode(self):
+        """
+        Enable akinator interaction mode.
+
+        Activates the akinator behaviour and disables all other
+        mutually exclusive behaviours.
+        """
         self.node.loginfo("akinator mode")
         self.behaviours.conversation = False
         self.behaviours.photographer = False
@@ -77,6 +144,12 @@ class ModeManager:
         self.behaviours.ouch = False
 
     def wifi_connect_mode(self):
+        """
+        Enable Wi-Fi connection mode.
+
+        Activates the Wi-Fi connection behaviour and disables all other
+        mutually exclusive behaviours.
+        """
         self.node.loginfo("wifi connect mode")
         self.behaviours.conversation = False
         self.behaviours.photographer = False
@@ -87,10 +160,26 @@ class ModeManager:
         self.behaviours.ouch = False
 
     def highlight_mode(self, mode):
+        """
+        Display the LED icon associated with a mode.
+
+        Parameters
+        ----------
+        mode : int
+            Mode identifier to preview.
+        """
         url = self.server.url_for_icon(self.icons[mode])
         self.leds.load_from_url(url)
 
     def select_mode(self, mode):
+        """
+        Apply the selected operating mode.
+
+        Parameters
+        ----------
+        mode : int
+            Mode identifier to activate.
+        """
         if mode == MODE_CONVERSATION:
             self.conversation_mode()
         elif mode == MODE_PHOTOGRAPHER:
@@ -105,6 +194,13 @@ class ModeManager:
         self.leds.clear()
 
     def run(self):
+        """
+        Main execution loop.
+
+        Continuously monitors the GPIO button, cycles through the
+        available modes, previews the selected icon on the LED matrix,
+        and applies the selected mode after a timeout.
+        """
         try:
             self.node.loginfo("starting behaviour")
             current_mode_idx = -1

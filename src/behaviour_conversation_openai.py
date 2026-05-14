@@ -27,20 +27,21 @@ class OpenAIAPI:
 
     Manages conversation history, initial system context, and context resets.
 
-    Attributes
-    ----------
-    api_key : str
-        OpenAI API key used for authorization.
-    base_url : str
-        Full URL of the chat completions endpoint.
-    headers : dict
-        HTTP headers sent with every request.
-    initial_context : list[dict]
-        System message(s) prepended to every conversation.
-    context : list[dict]
-        Full conversation history including system, user, and assistant turns.
-    context_reset : bool
-        True if the context has been reset and no new user message has been sent.
+    > ## Attributes
+
+    ``api_key : str`` : OpenAI API key used for authorization.
+
+    ``base_url : str`` : Full URL of the chat completions endpoint.
+
+    ``headers : dict`` : HTTP headers sent with every request.
+
+    ``initial_context : list[dict]`` : System message(s) prepended to every conversation.
+
+    ``context : list[dict]`` : Full conversation history including system, user, and assistant turns.
+
+    ``context_reset : bool`` : True if the context has been reset and no new user message has been sent.
+
+    > ## Functions
     """
 
     def __init__(self, api_key, base_url="https://api.openai.com/v1/chat/completions"):
@@ -139,32 +140,33 @@ class BehaviourConversation:
     OpenAI API, and delivers the reply through the speech driver. Supports
     emotional display reactions and task execution triggered by response prefixes.
 
-    Attributes
-    ----------
-    behaviours : mw.Behaviours
-        Middleware behaviour flags used to check if conversation mode is active.
-    conversation : mw.Conversation
-        Middleware conversation state (API key, model config).
-    onboard : mw.Onboard
-        Middleware onboard display controller for images and speech input.
-    speech : mw.Speech
-        Middleware speech synthesis driver for text-to-speech output.
-    server : mw.Server
-        Middleware server helper for resource URLs.
-    leds : mw.Leds
-        Middleware LED controller.
-    camera : mw.Camera
-        Middleware camera state used for photo tasks.
-    akinator : mw.Akinator
-        Middleware Akinator game state used for game tasks.
-    node : mw.Node
-        Middleware node used for shutdown and logging.
-    last_prompt_at : datetime.datetime
-        Timestamp of the most recent user prompt, used for history timeout.
-    processing_task : bool
-        True while an async task (photo, game, video) is in progress.
-    api : OpenAIAPI
-        OpenAI API client instance.
+    > ## Attributes
+
+    ``behaviours : mw.Behaviours`` : Middleware behaviour flags used to check if conversation mode is active.
+
+    ``conversation : mw.Conversation`` : Middleware conversation state (API key, model config).
+
+    ``onboard : mw.Onboard`` : Middleware onboard display controller for images and speech input.
+
+    ``speech : mw.Speech`` : Middleware speech synthesis driver for text-to-speech output.
+
+    ``server : mw.Server`` : Middleware server helper for resource URLs.
+
+    ``leds : mw.Leds`` : Middleware LED controller.
+
+    ``camera : mw.Camera`` : Middleware camera state used for photo tasks.
+
+    ``akinator : mw.Akinator`` : Middleware Akinator game state used for game tasks.
+
+    ``node : mw.Node`` : Middleware node used for shutdown and logging.
+
+    ``last_prompt_at : datetime.datetime`` : Timestamp of the most recent user prompt, used for history timeout.
+
+    ``processing_task : bool`` : True while an async task (photo, game, video) is in progress.
+
+    ``api : OpenAIAPI`` : OpenAI API client instance.
+
+    > ## Functions
     """
 
     def __init__(self):

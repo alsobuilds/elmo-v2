@@ -1,13 +1,13 @@
 """
 
-Sleep Mode.
+Tool node.
 
-This node is the sleep mode of elmo.
+Controls the robot sleep mode state machine and onboard eye transitions.
 
-When there isn't any interaction with the robot for 2 minutes,
-elmo's eyes change to sleeping-like eyes.
-When there isn't any interaction with the robot for 3 minutes
-more (total: 5mins), elmo's eyes fade into total darkness.
+When there is no user interaction for a configurable amount of time,
+the node transitions the onboard display through open, squint and dark
+states while coordinating with behaviour nodes that may temporarily own
+the display.
 
 """
 
@@ -60,30 +60,39 @@ class SleepMode:
     to Redis so behaviours can choose the correct transition animation
     without any dependency on sleep_mode internals.
 
-    Attributes
-    ----------
-    touch : mw.TouchSensors
-        Middleware touch sensor state.
-    gpio : mw.GPIO
-        Middleware GPIO state.
-    display : mw.Onboard
-        Middleware onboard display controller.
-    server : mw.Server
-        Middleware server helper for resource URLs.
-    mode_manager : ModeManager
-        Mode manager used to detect active non-idle behaviours.
-    last_activity : float
-        Timestamp of the most recent interaction or mode change.
-    current_state : str or None
-        Currently displayed state ("open", "squint", "dark", or None).
-    last_idle_state : bool or None
-        Last known idle state, used to detect mode transitions.
-    wake_event : threading.Event
-        Interrupts the main loop sleep on any relevant event.
-    playing_video : bool
-        True while a transition video is running.
-    next_peek_time : float
-        Timestamp after which the next dark-mode peek may fire.
+    > ## Attributes
+
+    ``touch : mw.TouchSensors`` : Middleware touch sensor state.
+
+    ``gpio : mw.GPIO`` : Middleware GPIO state.
+
+    ``display : mw.Onboard`` : Middleware onboard display controller.
+
+    ``server : mw.Server`` : Middleware server helper for resource URLs.
+
+    ``mode_manager : ModeManager`` : Mode manager used to determine idle and active states.
+
+    ``url_open : str`` : Pre-resolved URL for the open eyes image.
+
+    ``url_squint : str`` : Pre-resolved URL for the squint eyes image.
+
+    ``url_dark : str`` : Pre-resolved URL for the dark background image.
+
+    ``video_urls : dict`` : Mapping between transition identifiers and video URLs.
+
+    ``last_activity : float`` : Timestamp of the latest detected interaction.
+
+    ``current_state : str | None`` : Current eye state label.
+
+    ``last_idle_state : bool | None`` : Last detected idle state.
+
+    ``playing_video : bool`` : True while a transition video is active.
+
+    ``wake_event : threading.Event`` : Synchronisation event used to wake the main loop.
+
+    ``next_peek_time : float`` : Timestamp for the next dark-mode peek animation.
+
+    > ## Functions
     """
 
     def __init__(self):

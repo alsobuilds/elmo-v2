@@ -27,16 +27,17 @@ class DriverLeds:
     neopixel hardware. Also handles fade animations requested by behaviours,
     keeping all hardware access within the driver layer.
 
-    Attributes
-    ----------
-    node : mw.Node
-        Middleware node used for shutdown and logging.
-    leds : mw.Leds
-        Middleware LED state shared with behaviours.
-    colors : list[list[int]]
-        Local copy of the last written color state, used to detect changes.
-    pixels : neopixel.NeoPixel
-        Neopixel hardware interface connected to GPIO pin D18.
+    > ## Attributes
+
+    ``node : mw.Node`` : Middleware node used for shutdown and logging.
+
+    ``leds : mw.Leds`` : Middleware LED state shared with behaviours.
+
+    ``colors : list[list[int]]`` : Local copy of the last written color state, used to detect changes.
+    
+    ``pixels : neopixel.NeoPixel`` : Neopixel hardware interface connected to GPIO pin D18.
+
+    > ## Functions
     """
 
     def __init__(self):
@@ -44,6 +45,11 @@ class DriverLeds:
         Connect to middleware.
         Initialize node.
         Connect to neopixel.
+
+        Initialises the middleware node and LED state, sets up a local
+        color buffer to track the last written state, and opens a
+        connection to the neopixel strip on GPIO pin D18 with
+        ``auto_write`` disabled so frames are pushed explicitly.
         """
         self.node = mw.Node("driver_leds")
         self.leds = mw.Leds()
@@ -60,15 +66,20 @@ class DriverLeds:
         """
         Execute a hardware fade from current colors to leds.fade_target.
 
-        Behavior
-        --------
-        - Interpolates from the current pixel state to `leds.fade_target`
-        in `leds.fade_steps` steps over `leds.fade_duration` seconds.
-        - Writes each interpolated frame directly to the neopixel hardware.
-        - Aborts early and returns if `leds.fade_active` is cleared externally
-        (e.g. by the blush behaviour).
-        - On completion, syncs the final state back to middleware and clears
-        `leds.fade_active`.
+        Interpolates pixel colors from the current state to
+        ``leds.fade_target`` across ``leds.fade_steps`` steps spread over
+        ``leds.fade_duration`` seconds. Each interpolated frame is written
+        directly to the neopixel hardware. The method aborts early if
+        ``leds.fade_active`` is cleared externally between steps. On
+        successful completion, the final target state is synced back to
+        middleware and ``leds.fade_active`` is cleared.
+
+        Parameters
+        ----------
+        None
+            All inputs are read from the ``leds`` middleware object:
+            ``leds.fade_target``, ``leds.fade_steps``, ``leds.fade_duration``,
+            and ``leds.fade_active``.
         """
         start = [c[:] for c in self.colors]
         target = self.leds.fade_target[:]
@@ -103,12 +114,16 @@ class DriverLeds:
         """
         Main loop.
 
-        Behavior
-        --------
-        - Marks LEDs as ready in middleware.
-        - On each tick, checks for a pending fade request and executes it.
-        - Otherwise, detects color changes and writes them to the neopixel hardware.
-        - Turns off all LEDs and shuts down node in finally block.
+        Marks the LED subsystem as ready in middleware, then enters a
+        polling loop that runs until shutdown is requested. On each tick
+        the loop checks for a pending fade request and delegates to
+        ``_execute_fade`` if one is active. Otherwise it compares the
+        middleware color state against the local buffer and, if a change
+        is detected, clamps each channel to [0, 255], writes the new
+        colors to the neopixel hardware, and updates the local buffer.
+        On exit — whether from a ``KeyboardInterrupt`` or a middleware
+        shutdown signal — all LEDs are turned off and the node is shut
+        down cleanly.
         """
         try:
             self.leds.ready = True
